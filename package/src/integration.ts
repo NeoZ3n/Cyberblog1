@@ -1,6 +1,6 @@
-import type { AstroIntegration } from 'astro';
-import { z } from 'astro/zod';
-import { viteVirtualModulePluginBuilder } from './utils/virtual-module-plugin-builder';
+import type { AstroIntegration } from "astro";
+import { z } from "astro/zod";
+import { viteVirtualModulePluginBuilder } from "./utils/virtual-module-plugin-builder";
 
 const openGraphOptionsSchema = z.object({
 	/**
@@ -14,12 +14,12 @@ const openGraphOptionsSchema = z.object({
 });
 
 const giscusMappingSchema = z.union([
-	z.literal('pathname'),
-	z.literal('url'),
-	z.literal('title'),
-	z.literal('og:title'),
-	z.literal('specific'),
-	z.literal('number'),
+	z.literal("pathname"),
+	z.literal("url"),
+	z.literal("title"),
+	z.literal("og:title"),
+	z.literal("specific"),
+	z.literal("number"),
 ]);
 
 const giscusObjectSchema = z
@@ -71,10 +71,10 @@ const giscusObjectSchema = z
 		/**
 		 * Where the comments input should be placed. Default is `bottom`.
 		 */
-		commentsInput: z.union([z.literal('bottom'), z.literal('top')]).optional(),
+		commentsInput: z.union([z.literal("bottom"), z.literal("top")]).optional(),
 	})
 	.refine((data) => {
-		if (data.mapping === 'specific' || data.mapping === 'number') {
+		if (data.mapping === "specific" || data.mapping === "number") {
 			return !!data.term;
 		}
 
@@ -120,18 +120,20 @@ export const optionsSchema = z.object({
 
 export type GiscusMapping = z.infer<typeof giscusMappingSchema>;
 
-export default function integration(options: z.infer<typeof optionsSchema>): AstroIntegration {
-	if (typeof options.giscus === 'object') {
+export default function integration(
+	options: z.infer<typeof optionsSchema>,
+): AstroIntegration {
+	if (typeof options.giscus === "object") {
 		const giscusOpts = (options.giscus as z.infer<typeof giscusObjectSchema>)!;
 		const likelyUntouchedConfig = Object.keys(giscusOpts).every((key) => {
 			const item = giscusOpts[key as keyof typeof giscusOpts];
 
-			return typeof item === 'undefined' || item === false;
+			return typeof item === "undefined" || item === false;
 		});
 
 		if (likelyUntouchedConfig) {
 			throw new Error(
-				'\n\nERROR: It seems you have not updated the preset Giscus configuration for comments! Please change the settings in your astro.config.mjs by adding a .env with the required variables, adding the strings right in your configuration or removing the `giscus` option altogether.\n\n'
+				"\n\nERROR: It seems you have not updated the preset Giscus configuration for comments! Please change the settings in your astro.config.mjs by adding a .env with the required variables, adding the strings right in your configuration or removing the `giscus` option altogether.\n\n",
 			);
 		}
 	}
@@ -139,25 +141,25 @@ export default function integration(options: z.infer<typeof optionsSchema>): Ast
 	const validatedOptions = optionsSchema.parse(options);
 
 	const globals = viteVirtualModulePluginBuilder(
-		'spectre:globals',
-		'spectre-theme-globals',
+		"spectre:globals",
+		"spectre-theme-globals",
 		`
     export const name = ${JSON.stringify(validatedOptions.name)};
-    export const themeColor = ${JSON.stringify(validatedOptions.themeColor ?? '#8c5cf5')};
+    export const themeColor = ${JSON.stringify(validatedOptions.themeColor ?? "#8c5cf5")};
     export const twitterHandle = ${JSON.stringify(validatedOptions.twitterHandle)};
     export const openGraph = {
       home: ${JSON.stringify(validatedOptions.openGraph.home)},
       blog: ${JSON.stringify(validatedOptions.openGraph.blog)},
       projects: ${JSON.stringify(validatedOptions.openGraph.projects)},
     };
-    export const giscus = ${validatedOptions.giscus ? JSON.stringify(validatedOptions.giscus) : 'false'};
-  `
+    export const giscus = ${validatedOptions.giscus ? JSON.stringify(validatedOptions.giscus) : "false"};
+  `,
 	);
 
 	return {
-		name: 'spectre-theme',
+		name: "spectre-theme",
 		hooks: {
-			'astro:config:setup': ({ updateConfig }) => {
+			"astro:config:setup": ({ updateConfig }) => {
 				updateConfig({
 					vite: {
 						plugins: [globals()],

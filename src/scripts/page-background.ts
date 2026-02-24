@@ -1,4 +1,4 @@
-import { AstroError } from 'astro/errors';
+import { AstroError } from "astro/errors";
 
 interface LetterPosition {
 	x: number;
@@ -38,12 +38,12 @@ class PageBackground {
 	 */
 	constructor(baseCanvas: HTMLCanvasElement, overlayCanvas: HTMLCanvasElement) {
 		// Get 2D context for both canvases
-		const baseCtx = baseCanvas.getContext('2d');
-		const overlayCtx = overlayCanvas.getContext('2d');
+		const baseCtx = baseCanvas.getContext("2d");
+		const overlayCtx = overlayCanvas.getContext("2d");
 
 		// If either context is null, throw an error
 		if (!baseCtx || !overlayCtx) {
-			throw new AstroError('Unable to get 2D context.');
+			throw new AstroError("Unable to get 2D context.");
 		}
 
 		this.baseCanvas = baseCanvas;
@@ -60,7 +60,7 @@ class PageBackground {
 		// Set the primary color to the first color in the theme
 		this.primaryRgb = window
 			.getComputedStyle(document.documentElement)
-			.getPropertyValue('--primary-rgb')
+			.getPropertyValue("--primary-rgb")
 			.trim();
 
 		this.initBackground();
@@ -73,11 +73,12 @@ class PageBackground {
 	 */
 	private initBackground = () => {
 		let text: string =
-			document.title.toLowerCase().split(' | ')[0].replace(/\s/g, '_') || 'spectre';
+			document.title.toLowerCase().split(" | ")[0].replace(/\s/g, "_") ||
+			"spectre";
 
 		// Add additional underscore to separate words
-		if (text.includes('_')) {
-			text += '_';
+		if (text.includes("_")) {
+			text += "_";
 		}
 
 		// Letters are 17px wide and 35px tall
@@ -85,10 +86,10 @@ class PageBackground {
 		const lines = Math.ceil(this.height / 35);
 
 		// Loop through the canvas and draw the text
-		this.baseCtx.font = '28px Geist Mono';
-		this.baseCtx.textAlign = 'start';
-		this.baseCtx.textBaseline = 'top';
-		this.baseCtx.fillStyle = 'rgba(255, 255, 255, 0.01)';
+		this.baseCtx.font = "28px Geist Mono";
+		this.baseCtx.textAlign = "start";
+		this.baseCtx.textBaseline = "top";
+		this.baseCtx.fillStyle = "rgba(255, 255, 255, 0.01)";
 
 		for (let i = 0; i < lines; i++) {
 			for (let j = 0; j < letters; j++) {
@@ -104,12 +105,12 @@ class PageBackground {
 		// Randomly select 75% of the letters to animate
 		const randomLetters = this.getRandomAmountFromArray<LetterPosition>(
 			this.letterPositions,
-			Number.parseInt((lines * 0.75).toFixed(), 10)
+			Number.parseInt((lines * 0.75).toFixed(), 10),
 		);
 
-		this.overlayCtx.font = 'bold 28px Geist Mono';
-		this.overlayCtx.textAlign = 'start';
-		this.overlayCtx.textBaseline = 'top';
+		this.overlayCtx.font = "bold 28px Geist Mono";
+		this.overlayCtx.textAlign = "start";
+		this.overlayCtx.textBaseline = "top";
 		this.overlayCtx.fillStyle = `rgba(${this.primaryRgb}, 0)`;
 		this.overlayCtx.shadowBlur = 16;
 		this.overlayCtx.shadowColor = `rgba(${this.primaryRgb}, 0)`;
@@ -121,7 +122,8 @@ class PageBackground {
 			// Some number between LETTER_FADE_DURATION[0] and LETTER_FADE_DURATION[1] (in seconds)
 			const animLength =
 				this.LETTER_FADE_DURATION[0] +
-				Math.random() * (this.LETTER_FADE_DURATION[1] - this.LETTER_FADE_DURATION[0]);
+				Math.random() *
+					(this.LETTER_FADE_DURATION[1] - this.LETTER_FADE_DURATION[0]);
 
 			this.letterInstances.push({
 				x: letter.x,
@@ -133,7 +135,7 @@ class PageBackground {
 		}
 
 		// Make the base canvas visible
-		this.baseCanvas.style.opacity = '1';
+		this.baseCanvas.style.opacity = "1";
 	};
 
 	/**
@@ -177,7 +179,9 @@ class PageBackground {
 		const taken = new Array(len);
 
 		if (n > len) {
-			throw new AstroError('getRandomAmountFromArray: more elements taken than available');
+			throw new AstroError(
+				"getRandomAmountFromArray: more elements taken than available",
+			);
 		}
 
 		while (n--) {
@@ -194,21 +198,33 @@ class PageBackground {
 	 */
 	private redrawBackground = () => {
 		// Clear the overlay canvas
-		this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+		this.overlayCtx.clearRect(
+			0,
+			0,
+			this.overlayCanvas.width,
+			this.overlayCanvas.height,
+		);
 
-		this.overlayCtx.font = 'bold 28px Geist Mono';
-		this.overlayCtx.textAlign = 'start';
-		this.overlayCtx.textBaseline = 'top';
+		this.overlayCtx.font = "bold 28px Geist Mono";
+		this.overlayCtx.textAlign = "start";
+		this.overlayCtx.textBaseline = "top";
 		this.overlayCtx.shadowBlur = 16;
 
 		for (const letter of this.letterInstances) {
 			if (letter.fadeout > Date.now()) continue;
 
-			const alpha = this.easeInOutSine(Date.now(), letter.timestamp, letter.fadeout);
+			const alpha = this.easeInOutSine(
+				Date.now(),
+				letter.timestamp,
+				letter.fadeout,
+			);
 
 			if (alpha <= 0 && Date.now() > letter.fadeout) {
 				this.letterInstances.splice(this.letterInstances.indexOf(letter), 1);
-				const randomLetter = this.getRandomAmountFromArray<LetterPosition>(this.letterPositions, 1);
+				const randomLetter = this.getRandomAmountFromArray<LetterPosition>(
+					this.letterPositions,
+					1,
+				);
 
 				this.letterInstances.push({
 					x: randomLetter[0].x,
@@ -218,7 +234,8 @@ class PageBackground {
 					fadeout:
 						Date.now() +
 						(this.LETTER_FADE_DURATION[0] +
-							Math.random() * (this.LETTER_FADE_DURATION[1] - this.LETTER_FADE_DURATION[0])) *
+							Math.random() *
+								(this.LETTER_FADE_DURATION[1] - this.LETTER_FADE_DURATION[0])) *
 							1000,
 				});
 			}
@@ -245,7 +262,12 @@ class PageBackground {
 		this.overlayCanvas.height = this.height;
 
 		this.baseCtx.clearRect(0, 0, this.baseCanvas.width, this.baseCanvas.height);
-		this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+		this.overlayCtx.clearRect(
+			0,
+			0,
+			this.overlayCanvas.width,
+			this.overlayCanvas.height,
+		);
 
 		this.letterInstances = [];
 		this.letterPositions = [];
@@ -258,7 +280,7 @@ class PageBackground {
  * Loads the Geist Mono font. We have to do this asynchronously because the font is not preloaded.
  */
 async function loadFont() {
-	const font = new FontFace('Geist Mono', 'url(/fonts/GeistMono.woff2)');
+	const font = new FontFace("Geist Mono", "url(/fonts/GeistMono.woff2)");
 
 	await font.load();
 
@@ -271,12 +293,14 @@ async function loadFont() {
 async function initializeBackground() {
 	await loadFont();
 
-	const canvas = document.getElementById('bg-canvas') as HTMLCanvasElement;
-	const overlayCanvas = document.getElementById('overlay-canvas') as HTMLCanvasElement;
+	const canvas = document.getElementById("bg-canvas") as HTMLCanvasElement;
+	const overlayCanvas = document.getElementById(
+		"overlay-canvas",
+	) as HTMLCanvasElement;
 
 	const background = new PageBackground(canvas, overlayCanvas);
 
-	window.addEventListener('resize', () => {
+	window.addEventListener("resize", () => {
 		background.resizeBackground();
 	});
 }
