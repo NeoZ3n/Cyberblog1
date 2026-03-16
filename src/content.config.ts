@@ -1,4 +1,4 @@
-import { defineCollection, reference, z } from "astro:content";
+import { defineCollection, z } from "astro:content";
 import type { icons as lucideIcons } from "@iconify-json/lucide/icons.json";
 import type { icons as simpleIcons } from "@iconify-json/simple-icons/icons.json";
 import { file, glob } from "astro/loaders";
@@ -47,24 +47,21 @@ const workExperience = defineCollection({
 	}),
 });
 
-const tags = defineCollection({
-	loader: file("src/content/tags.json"),
-	schema: z.object({
-		id: z.string(),
-	}),
-});
-
-const posts = defineCollection({
-	loader: glob({ base: "src/content/posts", pattern: "**/*.{md,mdx}" }),
+const blog = defineCollection({
+	loader: glob({ base: "src/content/blog", pattern: "**/*.{md,mdx}" }),
 	schema: ({ image }) =>
 		z.object({
 			title: z.string(),
-			createdAt: z.coerce.date(),
-			updatedAt: z.coerce.date().optional(),
 			description: z.string(),
-			tags: z.array(reference("tags")),
-			draft: z.boolean().optional().default(false),
-			image: image(),
+			pubDate: z.coerce.date(),
+			updatedDate: z.coerce.date().optional(),
+			draft: z.boolean().default(false),
+			featured: z.boolean().default(false),
+			tags: z.array(z.string()),
+			category: z.string().optional(),
+			cover: image().optional(),
+			coverAlt: z.string().optional(),
+			author: z.string().default("Ayoub R."),
 		}),
 });
 
@@ -88,8 +85,7 @@ const projects = defineCollection({
 });
 
 export const collections = {
-	tags,
-	posts,
+	blog,
 	projects,
 	other,
 	quickInfo,

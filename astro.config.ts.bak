@@ -24,28 +24,43 @@ const config = defineConfig({
 	site: 'https://spectre.lou.gg',
 	output: 'static',
 	integrations: [
+t	rss(),
 		expressiveCode({
 			themes: [spectreDark],
 		}),
 		mdx(),
 		sitemap(),
 		spectre({
-			name: 'Ayoub R.',
+			name: 'Spectre',
 			openGraph: {
 				home: {
-					title: 'Ayoub R. - Cybersecurity Engineer',
-					description: 'Practical insights on detection engineering, SOC operations, threat hunting, DFIR, and Microsoft security.',
+					title: 'Spectre',
+					description: 'A minimalistic theme for Astro.',
 				},
 				blog: {
-					title: 'Blog - Cybersecurity Insights',
-					description: 'Technical guides and experiences from the field of cybersecurity.',
+					title: 'Blog',
+					description: 'News and guides for Spectre.',
 				},
 				projects: {
 					title: 'Projects',
 				},
 			},
+			giscus: {
+				repository: GISCUS_REPO,
+				repositoryId: GISCUS_REPO_ID,
+				category: GISCUS_CATEGORY,
+				categoryId: GISCUS_CATEGORY_ID,
+				mapping: GISCUS_MAPPING as GiscusMapping,
+				strict: GISCUS_STRICT === 'true',
+				reactionsEnabled: GISCUS_REACTIONS_ENABLED === 'true',
+				emitMetadata: GISCUS_EMIT_METADATA === 'true',
+				lang: GISCUS_LANG,
+			},
 		}),
 	],
+	adapter: node({
+		mode: 'standalone',
+	}),
 });
 
 export default config;

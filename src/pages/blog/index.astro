@@ -1,14 +1,14 @@
 ---
-import "../styles/article-list.css";
+import "../../styles/article-list.css";
 
 import { getCollection } from "astro:content";
 import { openGraph } from "spectre:globals";
-import Card from "../components/Card.astro";
-import Icon from "../components/Icon.astro";
-import Layout from "../layouts/Layout.astro";
+import Card from "../../components/Card.astro";
+import Icon from "../../components/Icon.astro";
+import Layout from "../../layouts/Layout.astro";
 
-const posts = await getCollection("posts", (post) => post.data.draft !== true);
-const tags = posts.flatMap((post) => post.data.tags.map((tag) => tag.id));
+const posts = await getCollection("blog", (post) => !post.data.draft);
+const tags = posts.flatMap((post) => post.data.tags);
 ---
 <Layout
   title={openGraph.blog.title || "Blog"}
@@ -40,11 +40,11 @@ const tags = posts.flatMap((post) => post.data.tags.map((tag) => tag.id));
 				<h2>Latest Posts</h2>
 			</div>
 			<div class="content-container">
-				{posts.sort((a, b) => b.data.createdAt.getTime() - a.data.createdAt.getTime()).map((post) => (
-					<a href={`/blog/${post.id}`} class="post-container" data-tags={post.data.tags.map((tag) => tag.id).join(",")}>
+				{posts.sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime()).map((post) => (
+					<a href={`/blog/${post.id}`} class="post-container" data-tags={post.data.tags.join(",")}>
 						<div class="post-header">
 							<h3>{post.data.title}</h3>
-							<span class="post-date">{post.data.createdAt.toLocaleDateString()}</span>
+							<span class="post-date">{post.data.pubDate.toLocaleDateString()}</span>
 						</div>
 						<span>{post.data.description}</span>
 					</a>

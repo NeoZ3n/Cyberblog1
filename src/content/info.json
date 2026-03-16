@@ -3,17 +3,32 @@
 		"id": 1,
 		"icon": {
 			"type": "lucide",
-			"name": "cake"
+			"name": "shield"
 		},
-		"text": "1 year old"
+		"text": "Detection Engineering"
 	},
 	{
 		"id": 2,
 		"icon": {
 			"type": "lucide",
-			"name": "earth"
+			"name": "search"
 		},
-		"type": "lucide",
-		"text": "Made in Germany"
+		"text": "Threat Hunting"
+	},
+	{
+		"id": 3,
+		"icon": {
+			"type": "lucide",
+			"name": "database"
+		},
+		"text": "SIEM & SOC"
+	},
+	{
+		"id": 4,
+		"icon": {
+			"type": "lucide",
+			"name": "microsoft"
+		},
+		"text": "Microsoft Security"
 	}
 ]

@@ -1,0 +1,35 @@
+---
+import Card from "../components/Card.astro";
+import Layout from "../layouts/Layout.astro";
+
+const title = "About";
+const description = "Learn more about Ayoub R., a cybersecurity engineer specializing in detection engineering, SOC, threat hunting, DFIR, and Microsoft security.";
+---
+
+<Layout title={title} description={description}>
+  <div class="layout-grid-left" slot="left">
+    <Card class="flex-col-card">
+      <h2 class="no-mt">Ayoub R.</h2>
+      <p>Cybersecurity Engineer</p>
+      <h3>Topics</h3>
+      <ul>
+        <li>Detection Engineering</li>
+        <li>SOC</li>
+        <li>Threat Hunting</li>
+        <li>DFIR</li>
+        <li>Microsoft Security</li>
+      </ul>
+    </Card>
+  </div>
+  <div class="layout-grid-right" slot="right">
+    <Card>
+      <h2>About Me</h2>
+      <p>
+        I am a passionate cybersecurity engineer with expertise in detection engineering, SOC operations, threat hunting, and digital forensics and incident response (DFIR). My focus is on Microsoft security technologies and building robust defenses against cyber threats.
+      </p>
+      <p>
+        This blog shares insights, tutorials, and experiences from the field of cybersecurity.
+      </p>
+    </Card>
+  </div>
+</Layout>

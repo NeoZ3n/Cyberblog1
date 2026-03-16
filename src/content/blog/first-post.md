@@ -1,49 +1,188 @@
 ---
-title: "Getting Started with Spectre"
-description: "Find out how to configure Spectre."
-image: "../assets/spectre.png"
-createdAt: 12-29-2024
+title: "Implementing Detection-as-Code with Microsoft Sentinel"
+description: "A practical guide to building scalable detection rules using code-based approaches in Microsoft Sentinel."
+pubDate: 2024-12-29
 draft: false
-tags:
-  - guide
+featured: true
+tags: ["detection-engineering", "microsoft-sentinel", "siem", "detection-as-code", "kql"]
+category: "Detection Engineering"
+author: "Ayoub R."
 ---
 
-Thanks for going with Spectre as your theme of choice! Let's get you set up. You can create a new Astro project with this theme by running:
+# Implementing Detection-as-Code with Microsoft Sentinel
 
-```bash
-# npm
-npm create astro@latest -- --template louisescher/spectre
+Detection engineering in modern SOC environments requires scalable, maintainable approaches to threat detection. Manual rule creation in SIEM platforms often leads to inconsistent implementations and maintenance challenges. Detection-as-Code addresses these issues by treating detection logic as version-controlled, testable code.
 
-# pnpm
-pnpm create astro@latest --template louisescher/spectre
+## What is Detection-as-Code?
 
-# yarn
-yarn create astro --template louisescher/spectre
+Detection-as-Code applies software engineering principles to security detection rules:
+
+- **Version Control**: Rules stored in Git repositories
+- **Code Review**: Peer review of detection logic
+- **Testing**: Automated validation of rule effectiveness
+- **CI/CD Integration**: Automated deployment pipelines
+- **Documentation**: Self-documenting rule definitions
+
+## Microsoft Sentinel Context
+
+Microsoft Sentinel provides native support for Detection-as-Code through:
+
+- KQL-based analytics rules
+- ARM templates for infrastructure as code
+- REST APIs for automation
+- Integration with Azure DevOps and GitHub Actions
+
+## Setting Up Detection-as-Code Workflow
+
+### Prerequisites
+- Azure subscription with Sentinel workspace
+- Git repository for rule storage
+- Azure CLI or PowerShell for deployment
+- Basic KQL knowledge
+
+### Repository Structure
+```
+detection-rules/
+├── rules/
+│   ├── suspicious-login.kql
+│   └── data-exfiltration.kql
+├── templates/
+│   └── analytics-rule.json
+├── tests/
+│   └── test-data.json
+└── scripts/
+    └── deploy.ps1
 ```
 
-First, a small introduction to the project structure:
+## Creating a Detection Rule
 
-```
-.
-├── public/
-│   └── img/
-├── src/
-│   ├── assets/
-│   │   └── pfp.png
-│   └── content/
-│       ├── assets/
-│       ├── other/
-│       ├── posts/
-│       ├── projects/
-│       ├── info.json
-│       ├── socials.json
-│       ├── tags.json
-│       └── work.json
-├── .env
-└── astro.config.mjs
+Let's build a detection for suspicious login patterns:
+
+```kql
+// Suspicious Login Detection
+// Detects multiple failed logins followed by success from same IP
+SigninLogs
+| where ResultType == "0" // Successful login
+| where IPAddress in (
+    SigninLogs
+    | where ResultType != "0" // Failed logins
+    | where TimeGenerated > ago(1h)
+    | summarize FailedCount = count() by IPAddress
+    | where FailedCount > 5
+    | project IPAddress
+)
+| project TimeGenerated, UserPrincipalName, IPAddress, Location
 ```
 
-There are other files and directories in the repository as well, but we're going to ignore them in this guide since they're not relevant.
+### Rule Template Structure
+```json
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "workspaceName": {
+      "type": "string"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.OperationalInsights/workspaces/providers/contentTemplates",
+      "apiVersion": "2023-04-01-preview",
+      "name": "[concat(parameters('workspaceName'), '/Microsoft.SecurityInsights/', variables('ruleId'))]",
+      "properties": {
+        "contentId": "[variables('ruleId')]",
+        "contentKind": "AnalyticsRule",
+        "contentProductId": "aa79ec95-5a5c-4d66-a8d1-6bf758b1bcf3",
+        "contentSchemaVersion": "3.0.0.0",
+        "mainTemplate": {
+          "resources": [
+            {
+              "type": "Microsoft.OperationalInsights/workspaces/providers/metadata",
+              "apiVersion": "2022-01-01-preview",
+              "properties": {
+                "version": "1.0.0.0",
+                "kind": "AnalyticsRule",
+                "contentId": "[variables('ruleId')]",
+                "parentId": "[variables('ruleId')]",
+                "source": {
+                  "kind": "Solution",
+                  "name": "Detection-as-Code",
+                  "sourceId": "[variables('ruleId')]"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "variables": {
+    "ruleId": "suspicious-login-detection"
+  }
+}
+```
+
+## Testing and Validation
+
+### Unit Testing Approach
+1. **Mock Data Creation**: Generate test datasets
+2. **Rule Execution**: Run rules against test data
+3. **Result Validation**: Verify expected alerts are generated
+4. **False Positive Analysis**: Check for unwanted alerts
+
+### Example Test Script
+```powershell
+# Test detection rule
+$testData = Get-Content "tests/login-test-data.json" | ConvertFrom-Json
+$results = Invoke-SentinelRule -RulePath "rules/suspicious-login.kql" -TestData $testData
+
+if ($results.Count -gt 0) {
+    Write-Host "Rule triggered as expected"
+} else {
+    Write-Error "Rule failed to detect test scenario"
+}
+```
+
+## Deployment and Maintenance
+
+### CI/CD Pipeline
+```yaml
+# .github/workflows/deploy-detections.yml
+name: Deploy Detection Rules
+on:
+  push:
+    branches: [ main ]
+    paths: [ 'detection-rules/**' ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Deploy to Sentinel
+      run: |
+        az login --service-principal -u ${{ secrets.AZURE_CLIENT_ID }} -p ${{ secrets.AZURE_CLIENT_SECRET }} --tenant ${{ secrets.AZURE_TENANT_ID }}
+        ./scripts/deploy.ps1
+```
+
+### Maintenance Best Practices
+- Regular rule performance reviews
+- Alert volume monitoring
+- False positive reduction
+- Documentation updates
+- Version control hygiene
+
+## Conclusion
+
+Detection-as-Code transforms detection engineering from manual processes to scalable, maintainable systems. By treating detection rules as code, organizations can:
+
+- Improve detection quality through testing
+- Reduce deployment errors
+- Enable collaboration across teams
+- Maintain audit trails
+- Scale detection capabilities
+
+Start small with one rule, establish your workflow, then expand to cover critical detection scenarios.
 
 ## Configuring the Theme
 

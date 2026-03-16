@@ -9,9 +9,9 @@ import Icon from "../components/Icon.astro";
 import ImageGlow from "../components/ImageGlow.astro";
 import Layout from "../layouts/Layout.astro";
 
-const [posts, projects, about, workExperience, quickInfo, socials] =
+const [blogPosts, projects, about, workExperience, quickInfo, socials] =
 	await Promise.all([
-		getCollection("posts", (post) => post.data.draft !== true),
+		getCollection("blog", (post) => !post.data.draft && post.data.featured),
 		getCollection("projects"),
 		getEntry("other", "about"),
 		getCollection("workExperience"),
@@ -19,14 +19,14 @@ const [posts, projects, about, workExperience, quickInfo, socials] =
 		getCollection("socials"),
 	]);
 
+// Get unique tags for featured topics
+const allTags = blogPosts.flatMap(post => post.data.tags);
+const featuredTags = Array.from(new Set(allTags)).slice(0, 6);
+
 const { Content: About } = await render(about!);
 ---
 
-<Layout
-	title={openGraph.home.title || name}
-	description={openGraph.home.description}
-	pagefindIgnore
->
+<Layout title="Ayoub R." description="Cybersecurity Engineer specializing in detection engineering, SOC operations, threat hunting, DFIR, and Microsoft security." pagefindIgnore>
 	<div class="layout-grid-left" slot="left">
 		<Card class="flex-col-card">
 			<ImageGlow
@@ -37,7 +37,12 @@ const { Content: About } = await render(about!);
 				alt="A purple, minimalist looking ghost."
 				loading="eager"
 			/>
-			<h2>{name}</h2>
+			<h2>Ayoub R.</h2>
+			<p class="hero-subtitle">Cybersecurity Engineer</p>
+			<p class="hero-description">
+				Focused on detection engineering, SOC operations, threat hunting, 
+				DFIR, and Microsoft security technologies.
+			</p>
 			<ul class="overview-list">
 				{
 					quickInfo.map((info) => (
@@ -56,7 +61,7 @@ const { Content: About } = await render(about!);
 			</ul>
 		</Card>
 		<Card>
-			<h3 class="no-mt">Socials</h3>
+			<h3 class="no-mt">Connect</h3>
 			<ul class="overview-list">
 				{
 					socials.map((item) => (
@@ -97,89 +102,69 @@ const { Content: About } = await render(about!);
 			<div class="header-container">
 				<Icon
 					type="lucide"
-					name="rss"
+					name="star"
 					width={24}
 					height={24}
 					class="glow-icon"
 				/>
-				<h2>Latest Posts</h2>
+				<h2>Featured Posts</h2>
 			</div>
 			<div class="content-container">
 				{
-					posts
-						.sort(
-							(a, b) => b.data.createdAt.getTime() - a.data.createdAt.getTime(),
-						)
-						.slice(0, 2)
+					blogPosts
+						.sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
+						.slice(0, 3)
 						.map((post) => (
 							<a href={`/blog/${post.id}`} class="post-container">
 								<div class="post-header">
 									<h3>{post.data.title}</h3>
 									<span class="post-date">
-										{post.data.createdAt.toLocaleDateString()}
+										{post.data.pubDate.toLocaleDateString()}
 									</span>
 								</div>
 								<span>{post.data.description}</span>
 							</a>
 						))
 				}
+				<a href="/blog" class="block-link">View all posts →</a>
 			</div>
 		</Card>
 		<Card>
 			<div class="header-container">
 				<Icon
 					type="lucide"
-					name="folder-git"
+					name="tags"
 					width={24}
 					height={24}
 					class="glow-icon"
 				/>
-				<h2>Latest Projects</h2>
+				<h2>Topics</h2>
 			</div>
-			<div class="content-container">
+			<div class="tags-container">
 				{
-					projects
-						.sort((a, b) => b.data.date.getTime() - a.data.date.getTime())
-						.slice(0, 2)
-						.map((project) => (
-							<a href={`/projects/${project.id}`} class="post-container">
-								<div class="post-header">
-									<h3>{project.data.title}</h3>
-									<span class="post-date">
-										{project.data.date.toLocaleDateString()}
-									</span>
-								</div>
-								<span>{project.data.description}</span>
-							</a>
-						))
-				}
-			</div>
-		</Card>
-		<Card>
-			<div class="header-container">
-				<Icon
-					type="lucide"
-					name="briefcase-business"
-					width={24}
-					height={24}
-					class="glow-icon"
-				/>
-				<h2>Work Experience</h2>
-			</div>
-			<div class="work-experience-container">
-				{
-					workExperience.reverse().map((entry) => (
-						<div class="work-experience-entry">
-							<span class="work-experience-duration">
-								{entry.data.duration}
-							</span>
-							<h3 class="work-experience-company">{entry.data.company}</h3>
-							<span class="work-experience-role">{entry.data.title}</span>
-							<p class="work-experience-desc">{entry.data.description}</p>
-						</div>
+					featuredTags.map((tag) => (
+						<a href={`/blog?tags=${encodeURIComponent(tag)}`} class="tag-link">
+							#{tag}
+						</a>
 					))
 				}
 			</div>
+		</Card>
+		<Card>
+			<div class="header-container">
+				<Icon
+					type="lucide"
+					name="user"
+					width={24}
+					height={24}
+					class="glow-icon"
+				/>
+				<h2>About</h2>
+			</div>
+			<div class="prose">
+				<About />
+			</div>
+			<a href="/about" class="block-link">Learn more →</a>
 		</Card>
 	</div>
 </Layout>
