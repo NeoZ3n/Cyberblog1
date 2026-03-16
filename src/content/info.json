@@ -26,7 +26,7 @@
 	{
 		"id": 4,
 		"icon": {
-			"type": "lucide",
+			"type": "simple-icons",
 			"name": "microsoft"
 		},
 		"text": "Microsoft Security"
