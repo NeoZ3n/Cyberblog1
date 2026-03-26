@@ -1,0 +1,211 @@
+title: "Authentication & Logs (FOUNDATION) — Azure AD (Microsoft Entra ID)"
+description: "Deep dive for detection engineers: sign‑in types and flows (human & workload), session/reauth (SIF & CAE), device SSO/PRT, and exactly what Entra logs at each step—with ready‑to‑run KQL."
+author: "RAMDOUNE AYOUB"
+pubDate: 2026-03-26
+tags:
+
+Microsoft Entra ID
+Azure AD
+Authentication
+KQL
+Microsoft Sentinel
+Detection Engineering
+series: "Azure AD Authentication: Attacks, Artifacts & Detections"
+draft: false
+
+
+
+Who this is for: detection engineers, DFIR analysts, and cloud identity architects who want ground truth on how Microsoft Entra ID authenticates humans and workloads, how sessions evolve (SIF/CAE), and what gets logged at each step so you can write reliable detections and triage faster. [learn.microsoft.com], [learn.microsoft.com]
+
+
+TL;DR
+
+Know the flows: OAuth 2.0 / OIDC (auth code + PKCE, device code, OBO), client credentials, plus SAML/WS‑Fed. Clients typically use MSAL. [learn.microsoft.com]
+Know the methods: Passkeys (FIDO2), Windows Hello for Business, CBA, Authenticator push w/ number matching, OATH TOTP, SMS/voice, and Temporary Access Pass (TAP) for bootstrap/recovery. [learn.microsoft.com], [learn.microsoft.com], [learn.microsoft.com], [learn.microsoft.com], [learn.microsoft.com]
+Know the tokens & sessions: Access vs refresh vs PRT; Sign‑in frequency controls; Continuous Access Evaluation (CAE) for near‑real‑time revocation; token lifetime caveats. [learn.microsoft.com], [learn.microsoft.com], [learn.microsoft.com], [docs.azure.cn]
+Know the logs: SigninLogs (interactive user), AADNonInteractiveUserSignInLogs (silent refresh/background), AADServicePrincipalSignInLogs (app‑only), AADManagedIdentitySignInLogs (MSI), AADUserRiskEvents/AADRiskyUsers (Identity Protection). [learn.microsoft.com], [learn.microsoft.com], [learn.microsoft.com], [learn.microsoft.com], [learn.microsoft.com]
+
+
+1) The moving parts of Entra authentication
+Identities and clients. Entra authenticates users (employees/guests), service principals (applications), and managed identities (Azure resources). Apps use standard OAuth 2.0/OIDC/SAML/WS‑Fed flows, commonly via Microsoft Authentication Libraries (MSAL). [learn.microsoft.com], [learn.microsoft.com]
+Authentication methods (human sign‑ins). Modern, phishing‑resistant options include passkeys (FIDO2) and Windows Hello for Business, alongside certificate‑based authentication (CBA); Microsoft Authenticator push uses number matching by default; Temporary Access Pass (TAP) bootstraps passwordless or recovery; SMS/voice/OATH remain available but are lower assurance. [learn.microsoft.com], [learn.microsoft.com], [learn.microsoft.com], [learn.microsoft.com], [learn.microsoft.com], [learn.microsoft.com]
+Workload authentication (non‑human). Apps authenticate with client credentials (secret or, preferably, certificate) or through workload identity federation that trusts an external OIDC issuer (e.g., GitHub Actions, Kubernetes), eliminating long‑lived secrets. Azure managed identities are platform‑managed service principals tied to resources. [learn.microsoft.com], [github.com], [learn.microsoft.com], [learn.microsoft.com]
+Device SSO & PRT. During device registration/join, Windows (and other platforms) obtain a Primary Refresh Token (PRT) for SSO; PRT is device‑bound and TPM‑protected when available, and later redeemed silently by the broker (WAM). [learn.microsoft.com]
+Where the truth lives (logs). Sign‑ins expose who/how/what plus RequestId/CorrelationId and per‑step AuthenticationDetails in the Entra portal, Graph, and Azure Monitor (Log Analytics/Sentinel). These are your primary artifacts for detection & DFIR. [learn.microsoft.com], [learn.microsoft.com]
+
+2) Anatomy of a sign‑in: phases & controls
+Plain Text[Client] ─► [Entra authorize/token endpoints]   1) Pre-auth (tenant checks, policy routing)   2) Primary auth (passwordless/password/cert)   3) Step-up/MFA (Conditional Access as needed)   4) Token issuance (ID/Access/Refresh or PRT)       ▼[Resource/API] (enforces CAE; may challenge)Afficher plus de lignes
+Session & reauthentication. Sign‑in frequency (SIF) controls browser/app session reauth cadence; you can require reauth “every time” for sensitive apps/actions (e.g., PIM activation) to reduce token‑theft blast radius. [learn.microsoft.com], [o365reports.com]
+Token lifetimes. Access tokens are short‑lived (~1h typical) and aren’t revoked mid‑lifetime; refresh tokens last longer (often 90 days; 24h for SPAs) and can be revoked; certain lifetimes are configurable with caveats. [learn.microsoft.com], [docs.azure.cn]
+Continuous Access Evaluation (CAE). Supported workloads (Graph/EXO/SPO/Teams) receive near‑real‑time signals to stop accepting a token after critical events (account disable, password reset, location change), forcing the client to reauthenticate via a claims challenge. Is CAE token is visible in sign‑in logs and a dedicated workbook. [learn.microsoft.com], [learn.microsoft.com]
+Device SSO & reauth. With a PRT, apps can silently acquire tokens; Conditional Access may still demand step‑up. WHfB gestures unlock local credentials but do not preclude server‑side MFA requirements. [learn.microsoft.com], [learn.microsoft.com]
+
+3) End‑to‑end authentication workflows (with diagrams)
+3.1 Interactive user sign‑in (Auth Code + PKCE)
+sequenceDiagram  participant U as User (browser/app)  participant A as Entra ID (AuthZ/AuthN)  participant R as Resource (API)  U->>A: /authorize (client_id, scope, PKCE)  A-->>U: Primary auth (passkey/passwordless)  A-->>U: Conditional Access → MFA if required  A-->>U: Authorization code (redirect)  U->>A: /token (code + PKCE)  A-->>U: ID / Access / Refresh tokens  U->>R: API call (Bearer access_token)  R-->>U: Data (or CAE challenge later)Afficher plus de lignesResource (API)Entra ID (AuthZ/AuthN)User (browser/app)Resource (API)Entra ID (AuthZ/AuthN)User (browser/app)#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 {font-family:"trebuchet ms", verdana, arial, sans-seriffont-size:16px;fill:rgb(204, 204, 204);}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .edge-animation-slow {stroke-dashoffset:900animation-duration:50s;animation-timing-function:linear;animation-delay:0s;animation-iteration-count:infinite;animation-direction:normal;animation-fill-mode:none;animation-play-state:running;animation-name:dash;animation-timeline:auto;animation-range-start:normal;animation-range-end:normal;stroke-linecap:round;stroke-dasharray:9, 5;}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .edge-animation-fast {stroke-dashoffset:900animation-duration:20s;animation-timing-function:linear;animation-delay:0s;animation-iteration-count:infinite;animation-direction:normal;animation-fill-mode:none;animation-play-state:running;animation-name:dash;animation-timeline:auto;animation-range-start:normal;animation-range-end:normal;stroke-linecap:round;stroke-dasharray:9, 5;}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .error-icon {fill:rgb(164, 65, 65)}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .error-text {fill:rgb(221, 221, 221)stroke:rgb(221, 221, 221);}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .edge-thickness-normal {stroke-width:1px}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .edge-thickness-thick {stroke-width:3.5px}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .edge-pattern-solid {stroke-dasharray:0}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .edge-thickness-invisible {stroke-width:0fill:none;}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .edge-pattern-dashed {stroke-dasharray:3}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .edge-pattern-dotted {stroke-dasharray:2}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .marker {fill:lightgreystroke:lightgrey;}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .marker.cross {stroke:lightgrey}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 svg {font-family:"trebuchet ms", verdana, arial, sans-seriffont-size:16px;}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 p {margin-top:0pxmargin-right:0px;margin-bottom:0px;margin-left:0px;}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .actor {stroke:rgb(204, 204, 204)fill:rgb(31, 32, 32);}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 text.actor > tspan {fill:lightgreystroke:none;}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .actor-line {stroke:rgb(204, 204, 204)}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .messageLine0 {stroke-width:1.5stroke-dasharray:none;stroke:lightgrey;}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .messageLine1 {stroke-width:1.5stroke-dasharray:2, 2;stroke:lightgrey;}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 #arrowhead path {fill:lightgreystroke:lightgrey;}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .sequenceNumber {fill:black}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 #sequencenumber {fill:lightgrey}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 #crosshead path {fill:lightgreystroke:lightgrey;}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .messageText {fill:lightgreystroke:none;}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .labelBox {stroke:rgb(204, 204, 204)fill:rgb(31, 32, 32);}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .labelText, #mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .labelText > tspan {fill:lightgreystroke:none;}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .loopText, #mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .loopText > tspan {fill:lightgreystroke:none;}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .loopLine {stroke-width:2pxstroke-dasharray:2, 2;stroke:rgb(204, 204, 204);fill:rgb(204, 204, 204);}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .note {stroke:rgb(47, 47, 47)fill:rgb(71, 73, 73);}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .noteText, #mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .noteText > tspan {fill:rgb(184, 182, 182)stroke:none;}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .activation0 {fill:rgb(71, 73, 73)stroke:rgb(204, 204, 204);}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .activation1 {fill:rgb(71, 73, 73)stroke:rgb(204, 204, 204);}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .activation2 {fill:rgb(71, 73, 73)stroke:rgb(204, 204, 204);}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .actorPopupMenu {position:absolute}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .actorPopupMenuPanel {position:absolutefill:rgb(31, 32, 32);box-shadow:rgba(0, 0, 0, 0.2) 0px 8px 16px 0px;filter:drop-shadow(rgba(0, 0, 0, 0.4) 3px 5px 2px);}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .actor-man line {stroke:rgb(204, 204, 204)fill:rgb(31, 32, 32);}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .actor-man circle, #mermaid-16812d90-51bd-4fa1-be64-ee032169e311 line {stroke:rgb(204, 204, 204)fill:rgb(31, 32, 32);stroke-width:2px;}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 :root {--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif}
+#mermaid-16812d90-51bd-4fa1-be64-ee032169e311{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;fill:#ccc;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .error-icon{fill:#a44141;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .error-text{fill:#ddd;stroke:#ddd;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .edge-thickness-normal{stroke-width:1px;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .edge-thickness-thick{stroke-width:3.5px;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .edge-pattern-solid{stroke-dasharray:0;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .edge-thickness-invisible{stroke-width:0;fill:none;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .edge-pattern-dashed{stroke-dasharray:3;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .edge-pattern-dotted{stroke-dasharray:2;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .marker{fill:lightgrey;stroke:lightgrey;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .marker.cross{stroke:lightgrey;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 p{margin:0;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .actor{stroke:#ccc;fill:#1f2020;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 text.actor>tspan{fill:lightgrey;stroke:none;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .actor-line{stroke:#ccc;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .messageLine0{stroke-width:1.5;stroke-dasharray:none;stroke:lightgrey;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .messageLine1{stroke-width:1.5;stroke-dasharray:2,2;stroke:lightgrey;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 #arrowhead path{fill:lightgrey;stroke:lightgrey;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .sequenceNumber{fill:black;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 #sequencenumber{fill:lightgrey;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 #crosshead path{fill:lightgrey;stroke:lightgrey;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .messageText{fill:lightgrey;stroke:none;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .labelBox{stroke:#ccc;fill:#1f2020;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .labelText,#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .labelText>tspan{fill:lightgrey;stroke:none;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .loopText,#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .loopText>tspan{fill:lightgrey;stroke:none;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .loopLine{stroke-width:2px;stroke-dasharray:2,2;stroke:#ccc;fill:#ccc;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .note{stroke:hsl(180, 0%, 18.3529411765%);fill:hsl(180, 1.5873015873%, 28.3529411765%);}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .noteText,#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .noteText>tspan{fill:rgb(183.8476190475, 181.5523809523, 181.5523809523);stroke:none;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .activation0{fill:hsl(180, 1.5873015873%, 28.3529411765%);stroke:#ccc;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .activation1{fill:hsl(180, 1.5873015873%, 28.3529411765%);stroke:#ccc;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .activation2{fill:hsl(180, 1.5873015873%, 28.3529411765%);stroke:#ccc;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .actorPopupMenu{position:absolute;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .actorPopupMenuPanel{position:absolute;fill:#1f2020;box-shadow:0px 8px 16px 0px rgba(0,0,0,0.2);filter:drop-shadow(3px 5px 2px rgb(0 0 0 / 0.4));}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .actor-man line{stroke:#ccc;fill:#1f2020;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 .actor-man circle,#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 line{stroke:#ccc;fill:#1f2020;stroke-width:2px;}#mermaid-16812d90-51bd-4fa1-be64-ee032169e311 :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}/authorize (client_id, scope, PKCE)Primary auth (passkey/passwordless)Conditional Access → MFA if requiredAuthorization code (redirect)/token (code + PKCE)ID / Access / Refresh tokensAPI call (Bearer access_token)Data (or CAE challenge later)
+Typical for modern apps; the interactive step appears in SigninLogs, subsequent silent refreshes often surface in AADNonInteractiveUserSignInLogs. [learn.microsoft.com], [learn.microsoft.com], [docs.azure.cn]
+3.2 Windows device SSO and PRT
+Windows device registration/join issues a PRT; the broker (WAM) redeems it to acquire app tokens silently. Conditional Access may still require MFA. [learn.microsoft.com]
+3.3 Device Code Flow (CLI/IoT/shared screens)
+An input‑constrained device displays a user_code; the user completes auth on another device; tokens are issued to the original device. Expect AuthenticationProtocol = deviceCode in logs. [learn.microsoft.com]
+3.4 Service principals (client credentials)
+App authenticates as itself with a secret/certificate (prefer certificates). No refresh tokens in this flow; the app requests new access tokens directly. Events land in AADServicePrincipalSignInLogs. [learn.microsoft.com], [learn.microsoft.com]
+3.5 Managed identities
+Azure assigns an identity to a resource; the workload exchanges an IMDS token for an Entra access token. Events appear in AADManagedIdentitySignInLogs. [learn.microsoft.com], [learn.microsoft.com]
+3.6 External IdP federation (SAML/WS‑Fed)
+For federated external domains, Entra redirects to the partner IdP and, on success, issues downstream tokens. Federation details surface in processing fields and applied CA policies. [learn.microsoft.com]
+
+4) Authentication methods: what actually happens
+
+Passkeys (FIDO2) & Windows Hello for Business. Device‑bound keys sign a server challenge (WebAuthn/CTAP). These are phishing‑resistant and can satisfy MFA/strength requirements depending on policy. [learn.microsoft.com], [learn.microsoft.com]
+Authenticator push with number matching. The sign‑in page shows a number the user must enter into Authenticator; push‑fatigue mitigation and enabled by default for push. [learn.microsoft.com], [learn.microsoft.com]
+Certificate‑based authentication (CBA). Entra validates an X.509 against configured CAs/CRLs and user mapping; when configured it replaces passwords for primary auth. Ensure CRL endpoints are reachable. [learn.microsoft.com]
+Temporary Access Pass (TAP). Time‑limited passcode (single or multi‑use) to bootstrap passwordless or recover when no strong method is available; governed by the Authentication Methods policy. [learn.microsoft.com]
+SMS/voice/OATH. Supported, but consider phishing risk versus phishing‑resistant methods. Use Authentication Strengths in CA to enforce preferred methods. [learn.microsoft.com]
+
+
+5) Where each step is logged (and how to read it)
+Core tables (Azure Monitor / Sentinel):
+
+SigninLogs — interactive user sign‑ins (primary + step‑up). Fields to know: AuthenticationDetails (array of steps), AuthenticationRequirement, AuthenticationMethodsUsed, AuthenticationProcessingDetails, ClientAppUsed, ConditionalAccessPolicies, RequestId, CorrelationId. [learn.microsoft.com]
+AADNonInteractiveUserSignInLogs — background refreshes, silent SSO, token exchanges on behalf of the user; events are often grouped for digestibility. [learn.microsoft.com], [docs.azure.cn]
+AADServicePrincipalSignInLogs — app‑only sign‑ins; check ClientCredentialType (secret/certificate/federated credential) and CA outcome. [learn.microsoft.com]
+AADManagedIdentitySignInLogs — managed identity sign‑ins with MSI details and any federated credential IDs. [learn.microsoft.com]
+AADUserRiskEvents / AADRiskyUsers — Identity Protection detections correlated to sign‑ins via RequestId. [learn.microsoft.com]
+AuditLogs — admin/configuration changes that can explain auth behavior changes. [learn.microsoft.com]
+
+Portal vantage point. The Entra Sign‑in logs blade shows “Basic info”, “Conditional Access”, and per‑step Authentication details with unique IDs; the built‑in Sign‑in Diagnostics can accelerate troubleshooting. [learn.microsoft.com]
+CAE visibility. Filter by Is CAE token in sign‑ins, or use the CAE insights workbook to view token challenges and IP mismatches across the tenant. [learn.microsoft.com]
+
+6) Log visibility by authentication method (field notes)
+
+Use these to sanity‑check detections and guide hunting. Each scenario below can be reproduced in a lab and verified in your tenant.
+
+A) Password + Authenticator (number matching)
+
+Expect in SigninLogs:
+AuthenticationRequirement = "multiFactorAuthentication"; AuthenticationDetails[0].authenticationMethod = "Password" then [1].authenticationMethod = "Microsoft Authenticator"/Push (labels vary); CA policy list in ConditionalAccessPolicies; device/app info. OTP codes/number values are never logged. [learn.microsoft.com], [learn.microsoft.com]
+
+B) Passkey (FIDO2) passwordless
+
+Expect: AuthenticationMethodsUsed includes FIDO; AuthenticationDetails[0].authenticationMethod = "FIDO"; AuthenticationRequirement equals singleFactorAuthentication or multiFactorAuthentication depending on your Authentication Strength policy. [learn.microsoft.com]
+
+C) Certificate‑based authentication (CBA)
+
+Expect: AuthenticationDetails[0] shows certificate‑based method; AuthenticationProcessingDetails contains certificate processing info; failures reveal CA/CRL/mapping issues. [learn.microsoft.com]
+
+D) TAP bootstrap to register passkey/WHfB
+
+Expect: AuthenticationMethodsUsed contains Temporary Access Pass; after registration, future sign‑ins show the new passwordless method as primary. [learn.microsoft.com]
+
+E) Device SSO/PRT (WHfB unlock + silent token)
+
+Expect: The initial interactive sign‑in in SigninLogs; subsequent silent refreshes in AADNonInteractiveUserSignInLogs (often grouped); device information appears in DeviceDetail. [learn.microsoft.com], [docs.azure.cn]
+
+F) Service principal (certificate)
+
+Expect: AADServicePrincipalSignInLogs with ClientCredentialType = "certificate", plus AppId/ServicePrincipalId, target resource, IP, and CA outcome. [learn.microsoft.com]
+
+G) Managed identity
+
+Expect: AADManagedIdentitySignInLogs with ManagedServiceIdentity payload (user‑ or system‑assigned), resource, and optional FederatedCredentialId when configured. [learn.microsoft.com]
+
+H) Device code flow
+
+Expect: AuthenticationProtocol = "deviceCode" on the interactive record for the approving user; useful to flag unusual device code usage patterns. [learn.microsoft.com]
+
+I) SAML/WS‑Fed federation
+
+Expect: AuthenticationProcessingDetails indicates external IdP; errors often reflect issuer/claims mismatches; CA evaluation applies post‑federation. [learn.microsoft.com]
+
+
+7) Session management & revocation in practice
+
+Use Sign‑in frequency (SIF) to bound session life; add reauth “every time” for sensitive workloads (e.g., PIM activation, admin portals) to inject guaranteed checks despite valid tokens. [learn.microsoft.com], [o365reports.com]
+Understand tokens: access tokens aren’t revoked mid‑lifetime; refresh tokens can be revoked; CAE provides near‑real‑time enforcement by cooperating resources. Validate CAE usage via the workbook and the Is CAE token filter. [learn.microsoft.com], [docs.azure.cn], [learn.microsoft.com], [learn.microsoft.com]
+
+
+8) Field guide: columns you’ll actually use
+
+RequestId + CorrelationId — glue between token, API, and sign‑ins; extract from token or app logs to line up records precisely. [learn.microsoft.com]
+AuthenticationDetails — the per‑step gold (method, result, time). Not all scenarios populate equally (e.g., some B2B cases). [learn.microsoft.com]
+AuthenticationProcessingDetails — federation/processing/broker hints (PTA/PHS, server names). [learn.microsoft.com]
+ConditionalAccessPolicies / ConditionalAccessStatus — which CA policies applied and whether they blocked/required MFA. [learn.microsoft.com]
+Non‑interactive tables — query both interactive and non‑interactive to understand the full lifecycle of a user’s session. [isroot.nl]
+
+
+9) Ready‑to‑run KQL (copy/paste)
+
+Adjust time windows and add your own where filters (tenant, app, user). Run in Sentinel or Log Analytics.
+
+Successful MFA sign‑ins by method (last 24h)
+KQLSigninLogs| where TimeGenerated > ago(24h) and ResultType == 0| extend details = parse_json(AuthenticationDetails)| mv-expand details| where tostring(details.result) =~ "success"| summarize count() by AuthenticationRequirement, method=tostring(details.authenticationMethod)| order by count_ descAfficher plus de lignes
+(Uses the SigninLogs schema and AuthenticationDetails array.) [learn.microsoft.com]
+Silent refresh (non‑interactive) spikes
+KQLAADNonInteractiveUserSignInLogs| where TimeGenerated > ago(24h)| summarize events=count() by bin(TimeGenerated, 1h), AppDisplayName| order by TimeGenerated descAfficher plus de lignes
+(Grouped background sign‑ins often reflect token refresh, FOCI, or brokered SSO.) [learn.microsoft.com]
+Service principal sign‑ins using certificates
+KQLAADServicePrincipalSignInLogs| where TimeGenerated > ago(7d)| where ClientCredentialType =~ "certificate" and ResultType == 0| summarize signIns=count() by ServicePrincipalId, AppDisplayNameAfficher plus de lignes
+(Find app‑only certificate usage across the tenant.) [learn.microsoft.com]
+Managed identity usage by resource
+KQLAADManagedIdentitySignInLogs| where TimeGenerated > ago(7d)| summarize signIns=count() by ResourceDisplayName, ServicePrincipalIdAfficher plus de lignes
+(Helps validate MSI patterns and unexpected resource access.) [learn.microsoft.com]
+
+10) What’s next
+In Part 2 we’ll map common attack chains (push fatigue, token theft/relay, OAuth consent abuse, service principal & managed identity abuse) to their exact log artifacts and start building high‑signal Sentinel analytics that separate user friction from active abuse. [research.splunk.com]
+
+Sources & Further Reading
+
+Sign‑in activity details, unique IDs, and portal diagnostics. [learn.microsoft.com]
+Azure Monitor log table references: SigninLogs, AADNonInteractiveUserSignInLogs, AADServicePrincipalSignInLogs, AADManagedIdentitySignInLogs. [learn.microsoft.com], [learn.microsoft.com], [learn.microsoft.com], [learn.microsoft.com]
+Authentication flows and app scenarios (MSAL/OAuth). [learn.microsoft.com]
+Device SSO & PRT (WAM/CloudAP, device join). [learn.microsoft.com]
+Session & reauth: Sign‑in frequency and reauth every time on sensitive actions. [learn.microsoft.com], [o365reports.com]
+Continuous Access Evaluation (CAE) overview + troubleshooting/workbook. [learn.microsoft.com], [learn.microsoft.com]
+Token lifetime & refresh token behavior. [learn.microsoft.com], [docs.azure.cn]
+Passkeys (FIDO2) & Windows Hello for Business. [learn.microsoft.com], [learn.microsoft.com]
+Number matching for Authenticator push. [learn.microsoft.com]
+Certificate‑based authentication (CBA) setup & constraints. [learn.microsoft.com]
+Temporary Access Pass (TAP) configuration and policy. [learn.microsoft.com]
+Client credentials (no refresh tokens) and app‑only auth. [learn.microsoft.com]
+Workload identity federation (federated credentials for external OIDC issuers). [learn.microsoft.com]
+Direct federation with SAML/WS‑Fed (external IdP).
